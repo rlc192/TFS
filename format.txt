@@ -1,0 +1,12 @@
+Superblock:
+"magic_num,max_inum,max_dnum,i_bitmap_blk,d_bitmap_blk,i_start_blk,d_start_blk"
+parse by "," to seperate fields
+
+inode:
+"ino,valid,size,type,link,data1/data2/.../data16,indir1/indir2/.../indir8,stat"
+
+bitmaps: some unsigned char*
+
+data: data
+
+
