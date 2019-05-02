@@ -107,12 +107,14 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	int curr_direct;
 	int curr_offset;
 	unsigned char buf[BLOCK_SIZE];
-	struct dirent *curr_dirent = malloc(sizeof(dirent));
+	struct dirent *curr_dirent = malloc(sizeof(struct dirent));
 	for(curr_direct = 0; curr_direct <= 15; curr_direct++) {
+		if(dir_inode.direct_ptr[curr_direct] == 0)
+			continue;
 		bio_read(curr_inode->direct_ptr[curr_direct], buf);
-		for(curr_offset = 0; curr_offset <= BLOCK_SIZE; curr_offset += sizeof(struct dirent)) {	
+		for(curr_offset = 0; curr_offset < BLOCK_SIZE - sizeof(struct dirent); curr_offset += sizeof(struct dirent)) {	
 			memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
-			if(memcmp(curr_dirent->name, fname0) == 0)
+			if(memcmp(curr_dirent->name, fname, name_len) == 0)
 				goto found;
 		}
 	}
@@ -127,11 +129,12 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 			bio_read(*curr_ptr, buf);
 			for(curr_offset = 0; curr_offset <= BLOCK_SIZE; curr_offset += sizeof(struct dirent)) {
 				memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
-				if(memcmp(curr_dirent->name, fname0) == 0)
+				if(memcmp(curr_dirent->name, fname, name_len) == 0)
 					goto found;
 			}
 		}
 	} */
+	free(curr_dirent);
 	return -1; //Not Found 
 
 	// Step 3: Read directory's data block and check each directory entry.
@@ -142,42 +145,112 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
-
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
-
-	// Step 2: Check if fname (directory name) is already used in other entries
-
-	// Step 3: Add directory entry in dir_inode's data block and write to disk
-
-	// Allocate a new data block for this directory if it does not exist
-
-	// Update directory inode
-
-	// Write directory entry
-
-	return 0;
+	// Step 2: Get data block of current directory from inode
+	int i;
+	int curr_direct;
+	int curr_offset;
+	unsigned char buf[BLOCK_SIZE] = {};
+	unsigned char saved_buf[BLOCK_SIZE] = {};
+	int saved_curr_direct;
+	struct dirent *curr_dirent = malloc(sizeof(struct dirent));
+	struct dirent *firstfree = malloc(sizeof(struct dirent));
+	memset(firstree, 0, sizeof(struct dirent));
+	short freeFound = 0;
+	for(curr_direct = 0; curr_direct <= 15; curr_direct++) {
+		if(dir_inode.direct_ptr[curr_direct] == 0)
+			continue;
+		bio_read(dir_inode.direct_ptr[curr_direct], buf);
+		for(curr_offset = 0; curr_offset < BLOCK_SIZE - sizeof(struct dirent); curr_offset += sizeof(struct dirent)) {	
+			memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
+			// Step 2: Check if fname (directory name) is already used in other entries
+			if(memcmp(curr_dirent->name, fname, name_len) == 0)
+				return -1; //Duplicate Name!
+			else if (memcmp(curr_dirent, firstfree, sizeof(struct dirent)) == 0 && !freeFound) {
+				firstfree = buf + curr_offset;
+				freeFound++;
+				memcpy(saved_buf, buf, BLOCK_SIZE);
+				saved_curr_direct = curr_direct;
+			}
+		}
+	}
+	if(!freeFound) {
+		// Allocate a new data block for this directory if it does not exist
+		if (curr_offset >= BLOCK_SIZE - sizeof(struct dirent)) {
+			for(i = 0; i <= 15; i++) {
+				if(dir_inode.direct_ptr[i] == 0) {
+					dir_inode.direct_ptr[i] = get_avail_blkno();
+					saved_curr_direct = i;
+					firstfree = saved_buf;
+					goto finish;
+				}
+			}
+			printf("Sorry, we don't accept singly indirect directories here!\n");
+			return -2 //Full On Dirents
+		}
+		else {
+			for(curr_direct = 0; curr_direct <= 15; curr_direct++) {
+				if(dir_inode.direct_ptr[curr_direct] == 0)
+					continue;
+				bio_read(dir_inode.direct_ptr[curr_direct], buf);
+				for(curr_offset = 0; curr_offset < BLOCK_SIZE - sizeof(struct dirent); curr_offset += sizeof(struct dirent)) {	
+					memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
+					if (memcmp(curr_dirent, firstfree, sizeof(struct dirent)) == 0) { 
+						firstfree = buf _ curr_offset;
+						freeFound++;
+						memcpy(saved_buf, buf, BLOCK_SIZE);
+						saved_curr_direct = curr_direct;
+						goto finish;
+				}
+			}
+			return -3; //Unspecified Error
+		}
+	finish:
+		firstfree->ino = f_ino;
+		firstfree->name = fname;
+		firstfree->valid = 1;
+		// Update directory inode
+		dir_inode.link++;
+		// Write directory entry
+		bio_write(dir_inode.direct_ptr[saved_curr_direct], saved_buf);
+		free(curr_dirent);
+		free(firstfree);
+		return 0;
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
-
-	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
-
-	// Step 2: Check if fname exist
-
-	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
-
-	return 0;
+	int curr_direct;
+	int curr_offset;
+	unsigned char buf[BLOCK_SIZE] = {};
+	struct dirent *curr_dirent = malloc(sizeof(struct dirent));
+	for(curr_direct = 0; curr_direct <= 15; curr_direct++) {
+		if(dir_inode.direct_ptr[curr_direct] == 0)
+			continue;
+		bio_read(dir_inode.direct_ptr[curr_direct], buf);
+		// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
+		for(curr_offset = 0; curr_offset < BLOCK_SIZE - sizeof(struct dirent); curr_offset += sizeof(struct dirent)) {	
+			memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
+			// Step 2: Check if fname exist
+			if(memcmp(curr_dirent->name, fname, name_len) == 0) {
+				// Step 3: If exist, then remove it from dir_inode's data block and write to disk
+				memset(buf + curr_offset, 0, sizeof(struct dirent));
+				bio_write(dir_inode.direct_ptr[curr_direct], buf);
+				free(curr_dirent);
+				return 0;
+			}
+		}
+	}
+	free(curr_dirent);
+	return -1; //Name Not Found
 }
 
 /*
  * namei operation
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
-
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
-
-	return 0;
+	
 }
 
 /*
