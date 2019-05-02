@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2019 CS416 Spring 2019
- *	
+ *
  *	Tiny File System
  *
  *	File:	tfs.h
