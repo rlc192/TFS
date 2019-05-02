@@ -69,16 +69,26 @@ int get_avail_blkno() {
  * inode operations
  */
 int readi(uint16_t ino, struct inode *inode) {
+	printf("In readi. Args: %d\n", ino);
 	// Step 1: Get the inode's on-disk block number
 	unsigned int inode_blkno = (unsigned int)ino / (BLOCK_SIZE / sizeof(struct inode));
 	// Step 2: Get offset of the inode in the inode on-disk block
 	unsigned int inode_offset = (unsigned int) ino % (BLOCK_SIZE / sizeof(struct inode)) * sizeof(struct inode);
+	printf("%d, %d\n", inode_blkno, inode_offset);
 	// Step 3: Read the block from disk and then copy into inode structure
-	char buf[BLOCK_SIZE];
-	bio_read(sb.i_start_blk + inode_blkno, buf);
-	struct inode *temp_inode = NULL;
-	memcpy(temp_inode, (buf + inode_offset), sizeof(struct inode));
-	*inode = *temp_inode;
+	char *buf = malloc(sizeof(char) * BLOCK_SIZE);
+	int i;
+	printf("sb data: %d\n", sb.i_start_blk);
+	bio_read(sb.i_start_blk + inode_blkno, buf); 
+	for(i = 0; i < BLOCK_SIZE; i++) {
+		printf("%c", buf[i]);
+	}
+	printf("graa\n");
+	struct inode *temp_inode = malloc(sizeof(struct inode));
+	printf("%d, %d\n", temp_inode, buf);
+	memcpy(temp_inode, buf, sizeof(struct inode));
+	inode = temp_inode;
+	printf("graa\n");
 	return 0;
 }
 
@@ -100,15 +110,19 @@ int writei(uint16_t ino, struct inode *inode) {
  * directory operations
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
+	printf("In dir_find. Args: %d, %s, %d\n", ino, fname, name_len);
 	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
-	struct inode *curr_inode = NULL;
+	struct inode *curr_inode = malloc(sizeof(struct inode));
 	readi(ino, curr_inode);
+	printf("%d\n", curr_inode);
+	printf("skeet\n");
 	// Step 2: Get data block of current directory from inode
 	int curr_direct;
 	int curr_offset;
 	unsigned char buf[BLOCK_SIZE];
 	struct dirent *curr_dirent = malloc(sizeof(struct dirent));
 	for(curr_direct = 0; curr_direct <= 15; curr_direct++) {
+		printf("Curr direct: %d\n", curr_direct);
 		if(curr_inode->direct_ptr[curr_direct] == 0)
 			continue;
 		bio_read(curr_inode->direct_ptr[curr_direct], buf);
@@ -209,12 +223,17 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
  * namei operation
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
+	printf("hit that yeet\n");
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 	char* token;
 	char* rest;
-	struct dirent *target = NULL;
-	token = strtok_r((char *)path, "\\", &rest);
+	struct dirent *target = malloc(sizeof(struct dirent));
+	if(ino == 0)
+		token = strtok_r((char *)path, "/", &rest);
+	else
+		token = strtok_r(NULL, "/", &rest);
+	printf("%s, /, %s\n", token, rest);
 	if (token == NULL) {
 		readi(ino, inode);
 		return 0;
@@ -232,6 +251,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
  * Make file system
  */
 int tfs_mkfs() {
+	printf("We here!\n");
 
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
@@ -311,11 +331,10 @@ static void tfs_destroy(void *userdata) {
 }
 
 static int tfs_getattr(const char *path, struct stat *stbuf) {
-
 	// Step 1: call get_node_by_path() to get inode from path
 	struct inode *temp = NULL;
-	get_node_by_path(path, 0, temp);
-
+	if(get_node_by_path(path, 0, temp) != 0)
+		return -1;
 	// Step 2: fill attribute of file into stbuf from inode
 	*stbuf = temp->vstat;
 	stbuf->st_mode   = S_IFDIR | 0755;
