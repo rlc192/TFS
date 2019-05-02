@@ -214,7 +214,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	char* token;
 	char* rest;
 	struct dirent *target = NULL;
-	token = strtok_r((char *)path, "\\", &rest);
+	token = strtok_r((char *)path, "/", &rest);
 	if (token == NULL) {
 		readi(ino, inode);
 		return 0;
@@ -314,9 +314,14 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 
 	// Step 1: call get_node_by_path() to get inode from path
 	struct inode *temp = NULL;
-	get_node_by_path(path, 0, temp);
+	int check;
+	check = get_node_by_path(path, 0, temp);
 
 	// Step 2: fill attribute of file into stbuf from inode
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
+		exit(EXIT_FAILURE);
+	}
 	*stbuf = temp->vstat;
 	stbuf->st_mode   = S_IFDIR | 0755;
 	stbuf->st_nlink  = 2;
@@ -342,7 +347,12 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode *temp = NULL;
-	get_node_by_path(path, 0, temp);
+	int check;
+	check = get_node_by_path(path, 0, temp);
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
+		exit(EXIT_FAILURE);
+	}
 	if (temp->type != 1){
 		fprintf(stderr, "ERROR:NOT A DIRECTORY\n");
 		exit(EXIT_FAILURE);
