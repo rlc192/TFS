@@ -388,17 +388,39 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 static int tfs_mkdir(const char *path, mode_t mode) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
+	char *dirc, *basec, *bname, *dpath;
+	dirc = strdup(path);
+	basec = strdup(path);
+	dpath = dirname(dirc);
+	bname = basename(basec);
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
+	struct inode *temp = NULL;
+	int check;
+	check = get_node_by_path(dpath, 0, temp);
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
+		exit(EXIT_FAILURE);
+	}
 
 	// Step 3: Call get_avail_ino() to get an available inode number
+	int ino = get_avail_ino();
 
 	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
+	dir_add(*temp, ino, bname, sizeof(bname));
 
 	// Step 5: Update inode for target directory
+	temp = NULL;
+	temp->ino = ino;
+	temp->valid = 1;
+	temp->size = 0;
+	temp->type = 1;
+	temp->link = 0;
+	temp->vstat.st_mtime = time(0);
+	temp->vstat.st_atime = time(0);
 
 	// Step 6: Call writei() to write inode to disk
-
+	writei(ino, temp);
 
 	return 0;
 }
