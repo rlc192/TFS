@@ -29,18 +29,22 @@
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
-
+struct superblock sb;
 /* 
  * Get available inode number from bitmap
  */
 int get_avail_ino() {
-
 	// Step 1: Read inode bitmap from disk
-	
+	unsigned char buf[BLOCK_SIZE];
+	bio_read(sb.i_bitmap_blk, buf);
 	// Step 2: Traverse inode bitmap to find an available slot
-
+	int curr_ino = 0;
+	while(!get_bitmap((bitmap_t)buf, curr_ino)) {
+		curr_ino++;
+	}
 	// Step 3: Update inode bitmap and write to disk 
-
+	set_bitmap((bitmap_t)buf, curr_ino);
+	bio_write(sb.i_bitmap_blk, buf);
 	return 0;
 }
 
@@ -48,13 +52,17 @@ int get_avail_ino() {
  * Get available data block number from bitmap
  */
 int get_avail_blkno() {
-
 	// Step 1: Read data block bitmap from disk
-	
+	unsigned char buf[BLOCK_SIZE];
+	bio_read(sb.d_bitmap_blk, buf);
 	// Step 2: Traverse data block bitmap to find an available slot
-
+	int curr_blkno = 0;
+	while(!get_bitmap((bitmap_t)buf, curr_blkno)) {
+		curr_blkno++;
+	}
 	// Step 3: Update data block bitmap and write to disk 
-
+	set_bitmap((bitmap_t)buf, curr_blkno);
+	bio_write(sb.d_bitmap_blk, buf);
 	return 0;
 }
 
@@ -62,24 +70,29 @@ int get_avail_blkno() {
  * inode operations
  */
 int readi(uint16_t ino, struct inode *inode) {
-
-  // Step 1: Get the inode's on-disk block number
-
-  // Step 2: Get offset of the inode in the inode on-disk block
-
-  // Step 3: Read the block from disk and then copy into inode structure
-
+	// Step 1: Get the inode's on-disk block number
+	unsigned int inode_blkno = (unsigned int)ino / (BLOCK_SIZE / sizeof(struct inode));
+	// Step 2: Get offset of the inode in the inode on-disk block
+	unsigned int inode_offset = (unsigned int) ino % (BLOCK_SIZE / sizeof(struct inode)) * sizeof(struct inode);
+	// Step 3: Read the block from disk and then copy into inode structure
+	char buf[BLOCK_SIZE];
+	bio_read(sb.i_start_blk + inode_blkno, buf);
+	struct inode *temp_inode = NULL;
+	memcpy(temp_inode, (buf + inode_offset), sizeof(struct inode));
+	*inode = *temp_inode;
 	return 0;
 }
 
 int writei(uint16_t ino, struct inode *inode) {
-
 	// Step 1: Get the block number where this inode resides on disk
-	
+	unsigned int inode_blkno = (unsigned int)ino / (BLOCK_SIZE / sizeof(struct inode));
 	// Step 2: Get the offset in the block where this inode resides on disk
-
+	unsigned int inode_offset = (unsigned int) ino % (BLOCK_SIZE / sizeof(struct inode)) * sizeof(struct inode);
 	// Step 3: Write inode to disk 
-
+	char buf[BLOCK_SIZE];
+	bio_read(sb.i_start_blk + inode_blkno, buf);
+	memcpy((buf + inode_offset), inode, sizeof(struct inode));
+	bio_write(sb.i_start_blk + inode_blkno, buf);
 	return 0;
 }
 
@@ -88,15 +101,45 @@ int writei(uint16_t ino, struct inode *inode) {
  * directory operations
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
+	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
+	struct inode *curr_inode = NULL;
+	readi(ino, curr_inode);
+	// Step 2: Get data block of current directory from inode
+	int curr_direct;
+	int curr_offset;
+	unsigned char buf[BLOCK_SIZE];
+	struct dirent *curr_dirent = malloc(sizeof(dirent));
+	for(curr_direct = 0; curr_direct <= 15; curr_direct++) {
+		bio_read(curr_inode->direct_ptr[curr_direct], buf);
+		for(curr_offset = 0; curr_offset <= BLOCK_SIZE; curr_offset += sizeof(struct dirent)) {	
+			memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
+			if(memcmp(curr_dirent->name, fname0) == 0)
+				goto found;
+		}
+	}
+	/* unsigned char indirect_buf[BLOCK_SIZE];
+	int curr_indirect;
+	int *curr_ptr;
+	int ptr_count;
+	for(curr_indirect = 0; curr_indirect <= 7; curr_indirect++) {
+		readi(curr_inode->indirect_ptr[curr_indirect], indirect_buf);
+		for(ptr_count = 0; ptr_count < BLOCK_SIZE; ptr_count += sizeof(int)) {
+			memcpy(curr_ptr, indirect_buf + ptr_count, sizeof(int));
+			bio_read(*curr_ptr, buf);
+			for(curr_offset = 0; curr_offset <= BLOCK_SIZE; curr_offset += sizeof(struct dirent)) {
+				memcpy(curr_dirent, buf + curr_offset, sizeof(struct dirent));
+				if(memcmp(curr_dirent->name, fname0) == 0)
+					goto found;
+			}
+		}
+	} */
+	return -1; //Not Found 
 
-  // Step 1: Call readi() to get the inode using ino (inode number of current directory)
-
-  // Step 2: Get data block of current directory from inode
-
-  // Step 3: Read directory's data block and check each directory entry.
-  //If the name matches, then copy directory entry to dirent structure
-
-	return 0;
+	// Step 3: Read directory's data block and check each directory entry.
+	//If the name matches, then copy directory entry to dirent structure
+	found:
+		dirent = curr_dirent;
+		return 0;
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
