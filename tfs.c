@@ -419,26 +419,47 @@ static int tfs_releasedir(const char *path, struct fuse_file_info *fi) {
 static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
-
+	const char *dir= dirname((char *)path);
+	char *base = basename((char *)path);
+	struct inode *parentdir = NULL;
+	unsigned char buf[BLOCK_SIZE];
 	// Step 2: Call get_node_by_path() to get inode of parent directory
-
+	if(get_node_by_path(dir, 0, parentdir) != 0)
+		return -1;
 	// Step 3: Call get_avail_ino() to get an available inode number
-
+	int ino = get_avail_ino();
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
-
+	if(dir_add(*parentdir, (uint16_t)ino, base, strlen(base)) != 0) {
+		bio_read(sb.i_bitmap_blk, buf);
+		unset_bitmap((bitmap_t)buf, ino);
+		return -1;
+	}
 	// Step 5: Update inode for target file
-
+	struct inode *new = NULL;
+	readi(ino, new);
+	new->valid = 1;
+	new->size = 0;
+	new->type = 0;
+	new->link = 0;
+	int i;
+	for(i = 0; i <= 15; i++) {
+		new->direct_ptr[i] = 0;
+		if(i <= 7)
+			new->indirect_ptr[i] = 0;
+	}
+	//set stat
 	// Step 6: Call writei() to write inode to disk
-
+	writei(ino, new);
 	return 0;
 }
 
 static int tfs_open(const char *path, struct fuse_file_info *fi) {
-
+	struct inode *opened = NULL;
 	// Step 1: Call get_node_by_path() to get inode from path
-
-	// Step 2: If not find, return -1
-
+	if(get_node_by_path(path, 0, opened) != 0) {
+		// Step 2: If not find, return -1
+		return -1;
+	}
 	return 0;
 }
 
