@@ -313,7 +313,7 @@ static void tfs_destroy(void *userdata) {
 static int tfs_getattr(const char *path, struct stat *stbuf) {
 
 	// Step 1: call get_node_by_path() to get inode from path
-	struct inode *temp;
+	struct inode *temp = NULL;
 	get_node_by_path(path, 0, temp);
 
 	// Step 2: fill attribute of file into stbuf from inode
@@ -328,7 +328,7 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
-	struct inode *temp;
+	struct inode *temp = NULL;
 	int check;
 	check = get_node_by_path(path, 0, temp);
 
@@ -341,7 +341,7 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
-	struct inode *temp;
+	struct inode *temp = NULL;
 	get_node_by_path(path, 0, temp);
 	if (temp->type != 1){
 		fprintf(stderr, "ERROR:NOT A DIRECTORY\n");
@@ -352,9 +352,8 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 	// Step 2: Read directory entries from its data blocks, and copy them to filler
 	int i, j;
 	int dirsize = sizeof(struct dirent);
-	int buff_offset = 0;
 	int direntsInBlock = BLOCK_SIZE / sizeof(struct dirent);
-	int leftover = 0;
+	int leftover = direntsInBlock;
 	if(temp->link > 0)
 	 	leftover = (temp->size - (temp->link-1) * (direntsInBlock * sizeof(struct dirent)));
 	int trailingDirent = leftover / sizeof(struct dirent);
@@ -365,8 +364,10 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 			if (!(i==(temp->link-1) && j<trailingDirent)){
 				break;
 			}
-			memcpy(buffer+buff_offset,buff+(j*dirsize), dirsize);
-			buff_offset += sizeof(struct dirent);
+			struct dirent *curr;
+			curr = (struct dirent*)buff+(j*dirsize);
+			memcpy(buffer,curr->name, sizeof(curr->name));
+			filler(buffer, buffer,NULL,0);
 		}
 	}
 
