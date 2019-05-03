@@ -76,21 +76,12 @@ int readi(uint16_t ino, struct inode *inode) {
 	unsigned int inode_blkno = (unsigned int)ino / (BLOCK_SIZE / sizeof(struct inode));
 	// Step 2: Get offset of the inode in the inode on-disk block
 	unsigned int inode_offset = (unsigned int) ino % (BLOCK_SIZE / sizeof(struct inode)) * sizeof(struct inode);
-	printf("%d, %d\n", inode_blkno, inode_offset);
 	// Step 3: Read the block from disk and then copy into inode structure
 	char *buf = malloc(sizeof(char) * BLOCK_SIZE);
-	int i;
-	printf("sb data: %d\n", sb.i_start_blk);
 	bio_read(sb.i_start_blk + inode_blkno, buf); 
-	for(i = 0; i < BLOCK_SIZE; i++) {
-		printf("%c", buf[i]);
-	}
-	printf("graa\n");
 	struct inode *temp_inode = malloc(sizeof(struct inode));
-	printf("%d, %d\n", temp_inode, buf);
-	memcpy(temp_inode, buf, sizeof(struct inode));
+	memcpy(temp_inode, buf + inode_offset, sizeof(struct inode));
 	inode = temp_inode;
-	printf("graa\n");
 	return 0;
 }
 
@@ -113,7 +104,7 @@ int writei(uint16_t ino, struct inode *inode) {
  * directory operations
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
-	printf("In dir_find(). Args: ino %d, fname %s, name_len %d\n", (int)ino, fname, name_len);
+	printf("In dir_find(). Args: ino %d, fname %s, name_len %d\n", (int)ino, fname, (int)name_len);
 	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
 	struct inode *curr_inode = malloc(sizeof(struct inode));
 	readi(ino, curr_inode);
@@ -148,7 +139,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
-	printf("In dir_add(). Args: ino %d, fname %s, name_len %d\n", (int)ino, fname, name_len);
+	printf("In dir_add(). Args: ino %d, fname %s, name_len %d\n", (int)f_ino, fname, (int)name_len);
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
 	// Step 2: Check if fname (directory name) is already used in other entries
 	struct dirent *curr_dirent = malloc(sizeof(struct dirent));
@@ -186,7 +177,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
-	printf("In dir_remove(). Args: fname %s, name_len %d\n", (int)ino, fname, name_len);
+	printf("In dir_remove(). Args: fname %s, name_len %d\n", fname, (int)name_len);
 	int curr_direct;
 	int curr_offset;
 	unsigned char buf[BLOCK_SIZE] = {};
@@ -201,7 +192,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 				goto found;
 		}
 	}
-	printf("Name not found to remove!\n")
+	printf("Name not found to remove!\n");
 	return -1; //Name Not Found
 
 	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
