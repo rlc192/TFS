@@ -71,7 +71,7 @@ int get_avail_blkno() {
  * inode operations
  */
 int readi(uint16_t ino, struct inode *inode) {
-	printf("In readi(). Args: %d\n, some inode", (int)ino);
+	printf("In readi(). Args: %d, some inode\n", (int)ino);
 	// Step 1: Get the inode's on-disk block number
 	unsigned int inode_blkno = (unsigned int)ino / (BLOCK_SIZE / sizeof(struct inode));
 	// Step 2: Get offset of the inode in the inode on-disk block
@@ -86,7 +86,7 @@ int readi(uint16_t ino, struct inode *inode) {
 }
 
 int writei(uint16_t ino, struct inode *inode) {
-	printf("In writei(). Args: %d\n, some inode", (int)ino);
+	printf("In writei(). Args: %d, some inode\n", (int)ino);
 	// Step 1: Get the block number where this inode resides on disk
 	unsigned int inode_blkno = (unsigned int)ino / (BLOCK_SIZE / sizeof(struct inode));
 	// Step 2: Get the offset in the block where this inode resides on disk
@@ -238,11 +238,8 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	}
 	printf("%s, /\n", token);
 	if (token == NULL) {
-		printf("c\n");
+		readi(ino, inode);
 		return 0;
-	}
-	else if (strcmp(token, "") == 0) {
-		return get_node_by_path(token, ino, inode);
 	}
 	if(dir_find(ino, token, strlen(token), target) == 0)
 		return get_node_by_path(token, ino, inode);

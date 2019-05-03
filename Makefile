@@ -12,5 +12,5 @@ tfs: $(OBJ)
 
 .PHONY: clean
 clean:
-	rm -f *.o tfs
+	rm -f *.o tfs DISKFILE
 
