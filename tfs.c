@@ -225,7 +225,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
  * namei operation
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
-	printf("In get_node_by_path(). Args: Path %s, ino %d", path, (int)ino);
+	printf("In get_node_by_path(). Args: Path %s, ino %d\n", path, (int)ino);
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 	char* token = strdup(path);
@@ -236,7 +236,6 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	else {
 		token = strtok(NULL, "/");
 	}
-	printf("%s, /\n", token);
 	if (token == NULL) {
 		readi(ino, inode);
 		return 0;
