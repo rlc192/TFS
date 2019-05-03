@@ -160,7 +160,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	}
 	bio_read(dir_inode.direct_ptr[block], buf);
 
-	curr_dirent =(struct dirent *)buf + offset;
+	curr_dirent = (struct dirent *)buf + offset;
 	curr_dirent->ino = f_ino;
 	memcpy(curr_dirent->name, fname, name_len);
 	curr_dirent->valid = 1;
@@ -170,7 +170,6 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 		dir_inode.size += (BLOCK_SIZE % sizeof(struct dirent)); //Extra padding
 	// Write directory entry
 	bio_write(dir_inode.direct_ptr[block], buf);
-	free(curr_dirent);
 	printf("Dirent added!\n");
 	return 0;
 
@@ -287,6 +286,14 @@ int tfs_mkfs() {
 	root.size = 0;
 	root.type = 1;
 	root.link = 0;
+
+	int i;
+	for(i = 0; i <= 15; i++) {
+		root.direct_ptr[i] = 0;
+		if(i <= 7)
+			root.indirect_ptr[i] = 0;
+	}
+
 	root.vstat.st_mtime = time(0);
 	root.vstat.st_atime = time(0);
 	writei(root.ino, &root);
