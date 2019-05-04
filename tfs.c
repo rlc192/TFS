@@ -79,7 +79,7 @@ int readi(uint16_t ino, struct inode *inode) {
 	printf("Block %d, Offset %d\n", (int) inode_blkno, (int)inode_offset);
 	// Step 3: Read the block from disk and then copy into inode structure
 	char *buf = malloc(sizeof(char) * BLOCK_SIZE);
-	bio_read(inode_blkno, buf); 
+	bio_read(inode_blkno, buf);
 	struct inode *temp_inode = malloc(sizeof(struct inode));
 	memcpy(temp_inode, buf + inode_offset, sizeof(struct inode));
 	*inode = *temp_inode;
@@ -156,7 +156,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	unsigned char buf[BLOCK_SIZE] = {};
 	int block = dir_inode.size / BLOCK_SIZE;
 	int offset = dir_inode.size % BLOCK_SIZE;
-	
+
 	// Allocate a new data block for this directory if it does not exist
 	if(dir_inode.direct_ptr[block] == -1) {
 		dir_inode.direct_ptr[block] = get_avail_blkno();
@@ -590,7 +590,7 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 	int check;
 	check = get_node_by_path(path, 0, temp);
 	if (check != 0){
-		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
 		return -1;
 	}
 
@@ -599,26 +599,75 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 	int span = (offset%BLOCK_SIZE + size)/BLOCK_SIZE;
 	int end = start + span; //it's possible for start=end if span=0
 	int buff_offset = 0;
+	int indirect_capacity = BLOCK_SIZE/sizeof(int);
 	char buff[BLOCK_SIZE];
-	int i;
-	for (i=start; i<16 && i<=end; i++){
+	int i = start, j = start;
+
+	// Step 2a: Copy direct blocks into buffer
+	for (;i<16 && size > 0; i++){
 		bio_read(temp->direct_ptr[i], buff);
 		if(i==start){
-			if(offset+size>BLOCK_SIZE){
+			if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
 				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), (BLOCK_SIZE-(offset%BLOCK_SIZE)));
+				buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
+				size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
 			}else{
-				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), size;
+				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), size);
 			}
 		} else {
-			
+			if(size>BLOCK_SIZE){
+				memcpy((buffer+buff_offset),buff, BLOCK_SIZE);
+				buff_offset += BLOCK_SIZE;
+				size -= BLOCK_SIZE;
+			}else{
+				memcpy((buffer+buff_offset),buff, size);
+			}
 		}
 	}
 
+	//step 2b: Copy indirect blocks into buffer
+	int indir_only = 0;
+	if (i == j){	//direct blocks not used
+		i = (i-16)/indirect_capacity;
+		j = (start-16)%indirect_capacity;
+		indir_only = 1;
+	}
+	else if (j < i && size > 0){	//direct blocks used - still more to read
+		i = 0;
+		j = 0;
+		end -= 16;
+	}
+	int blocks[BLOCK_SIZE/sizeof(int)];
+	for (;i<8 && size > 0; i++){
+		bio_read(temp->indirect_ptr[i], blocks);
+		for (;j<indirect_capacity && size > 0; j++){
+			bio_read(blocks[j],buff);
+			if(indir_only){
+				if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
+					memcpy(buffer,(buff+(offset%BLOCK_SIZE)), (BLOCK_SIZE-(offset%BLOCK_SIZE)));
+					buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
+					size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
+					indir_only = 0;
+				}else{
+					memcpy(buffer,(buff+(offset%BLOCK_SIZE)), size);
+				}
+			} else {
+				if(size>BLOCK_SIZE){
+					memcpy((buffer+buff_offset),buff, BLOCK_SIZE);
+					buff_offset += BLOCK_SIZE;
+					size -= BLOCK_SIZE;
+				}else{
+					memcpy((buffer+buff_offset),buff, size);
+				}
+			}
+		}
+
+	}
 
 	// Step 3: copy the correct amount of data from offset to buffer
 
 	// Note: this function should return the amount of bytes you copied to buffer
-	return 0;
+	return size;
 }
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
