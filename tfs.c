@@ -596,8 +596,6 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 
 	// Step 2: Based on size and offset, read its data blocks from disk
 	int start = offset/BLOCK_SIZE;
-	int span = (offset%BLOCK_SIZE + size)/BLOCK_SIZE;
-	int end = start + span; //it's possible for start=end if span=0
 	int buff_offset = 0;
 	int indirect_capacity = BLOCK_SIZE/sizeof(int);
 	char buff[BLOCK_SIZE];
@@ -635,7 +633,6 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 	else if (j < i && size > 0){	//direct blocks used - still more to read
 		i = 0;
 		j = 0;
-		end -= 16;
 	}
 	int blocks[BLOCK_SIZE/sizeof(int)];
 	for (;i<8 && size > 0; i++){
@@ -661,7 +658,6 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 				}
 			}
 		}
-
 	}
 
 	// Step 3: copy the correct amount of data from offset to buffer
@@ -672,8 +668,108 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 	// Step 1: You could call get_node_by_path() to get inode from path
+	struct inode *temp = malloc(sizeof(struct inode));
+
+
+	//free ater step 4? ^^^^^
+
+
+	int check;
+	check = get_node_by_path(path, 0, temp);
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
+		return -1;
+	}
 
 	// Step 2: Based on size and offset, read its data blocks from disk
+	int start = offset/BLOCK_SIZE;
+	int buff_offset = 0;
+	int indirect_capacity = BLOCK_SIZE/sizeof(int);
+	char buff[BLOCK_SIZE];
+	int i = start, j = start;
+	int altered = 0;
+	int altered_o = 0;
+
+	// Step 2a: Write direct blocks from buffer
+	for (;i<16 && size > 0; i++){
+		if (temp->direct_ptr[i] == 0){
+			temp->direct_ptr[i] = get_avail_blkno();
+			altered = 1;
+		}
+		if(i==start){
+			if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
+				bio_read(temp->direct_ptr[i], buff);	//read block so data is not overwritten as null
+				memcpy((buff+(offset%BLOCK_SIZE)), buffer, (BLOCK_SIZE-(offset%BLOCK_SIZE)));
+				buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
+				size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
+			}else{
+				bio_read(temp->direct_ptr[i], buff);	//read block so data is not overwritten as null
+				memcpy((buff+(offset%BLOCK_SIZE)), buffer, size);
+			}
+		} else {
+			if(size>BLOCK_SIZE){
+				memcpy(buff, (buffer+buff_offset), BLOCK_SIZE);
+				buff_offset += BLOCK_SIZE;
+				size -= BLOCK_SIZE;
+			}else{
+				memcpy(buff, (buffer+buff_offset), size);
+			}
+		}
+		bio_write(temp->direct_ptr[i], buff);
+	}
+
+	//step 2b: Write indirect blocks from buffer
+	int indir_only = 0;
+	if (i == j){	//direct blocks not used
+		i = (i-16)/indirect_capacity;
+		j = (start-16)%indirect_capacity;
+		indir_only = 1;
+	}
+	else if (j < i && size > 0){	//direct blocks used - still more to read
+		i = 0;
+		j = 0;
+	}
+	int blocks[BLOCK_SIZE/sizeof(int)];
+	for (;i<8 && size > 0; i++){
+		if (temp->direct_ptr[i] == 0){
+			temp->direct_ptr[i] = get_avail_blkno();
+			altered = 1;
+		}
+		bio_read(temp->indirect_ptr[i], blocks);
+		for (;j<indirect_capacity && size > 0; j++){
+			if(blocks[j] == 0){
+				blocks[j] = get_avail_blkno();
+				altered_o = 1;
+			}
+			if(indir_only){
+				if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
+					bio_read(blocks[j], buff);	//read block so data is not overwritten as null
+					memcpy((buff+(offset%BLOCK_SIZE)), buffer, (BLOCK_SIZE-(offset%BLOCK_SIZE)));
+					buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
+					size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
+					indir_only = 0;
+				}else{
+					bio_read(blocks[j], buff);	//read block so data is not overwritten as null
+					memcpy((buff+(offset%BLOCK_SIZE)), buffer, size);
+				}
+			} else {
+				if(size>BLOCK_SIZE){
+					memcpy(buff, (buffer+buff_offset), BLOCK_SIZE);
+					buff_offset += BLOCK_SIZE;
+					size -= BLOCK_SIZE;
+				}else{
+					memcpy(buff, (buffer+buff_offset), size);
+				}
+			}
+			bio_write(blocks[j],buff);
+		}
+		if (altered_o) {
+			bio_write(temp->indirect_ptr[i], blocks); //update indirect block
+		}
+	}
+	if(altered){
+		writei(temp->ino, temp);
+	}
 
 	// Step 3: Write the correct amount of data from offset to disk
 
