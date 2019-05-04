@@ -564,8 +564,39 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
 	// Step 1: You could call get_node_by_path() to get inode from path
+	struct inode *temp = malloc(sizeof(struct inode));
+
+
+	//free ater step 3? ^^^^^
+
+
+	int check;
+	check = get_node_by_path(path, 0, temp);
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
+		return -1;
+	}
 
 	// Step 2: Based on size and offset, read its data blocks from disk
+	int start = offset/BLOCK_SIZE;
+	int span = (offset%BLOCK_SIZE + size)/BLOCK_SIZE;
+	int end = start + span; //it's possible for start=end if span=0
+	int buff_offset = 0;
+	char buff[BLOCK_SIZE];
+	int i;
+	for (i=start; i<16 && i<=end; i++){
+		bio_read(temp->direct_ptr[i], buff);
+		if(i==start){
+			if(offset+size>BLOCK_SIZE){
+				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), (BLOCK_SIZE-(offset%BLOCK_SIZE)));
+			}else{
+				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), size;
+			}
+		} else {
+			
+		}
+	}
+
 
 	// Step 3: copy the correct amount of data from offset to buffer
 
