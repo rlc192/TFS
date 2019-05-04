@@ -580,6 +580,7 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
+	size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *temp = malloc(sizeof(struct inode));
 
@@ -661,12 +662,15 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 	}
 
 	// Step 3: copy the correct amount of data from offset to buffer
+	//done in above code
 
 	// Note: this function should return the amount of bytes you copied to buffer
-	return size;
+	return size_cp;
 }
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+
+	size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *temp = malloc(sizeof(struct inode));
 
@@ -772,11 +776,13 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 	}
 
 	// Step 3: Write the correct amount of data from offset to disk
+	//done in above code
 
 	// Step 4: Update the inode info and write it to disk
+	//done in above code
 
 	// Note: this function should return the amount of bytes you write to disk
-	return size;
+	return size_cp;
 }
 
 static int tfs_unlink(const char *path) {
