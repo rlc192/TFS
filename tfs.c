@@ -498,13 +498,13 @@ static int tfs_rmdir(const char *path) {
 		return -1;
 	}
 
-	// Step 3: Clear data block bitmap of target directory
+	// Step 3: Clear inode block bitmap of target directory
 	unsigned char buf[BLOCK_SIZE];
 	bio_read(sb.i_bitmap_blk, buf);
 	unset_bitmap((bitmap_t)buf, temp->ino);
 	bio_write(sb.i_bitmap_blk, buf);
 
-	// Step 4: Clear inode bitmap and its data block
+	// Step 4: Clear data bitmap and its data block
 	bio_read(sb.d_bitmap_blk, buf);
 	int i;
 	for (i=0; i<temp->link && i<16; i++){
@@ -580,7 +580,7 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
-	size_cp = size;
+	int size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *temp = malloc(sizeof(struct inode));
 
@@ -670,7 +670,7 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
-	size_cp = size;
+	int size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *temp = malloc(sizeof(struct inode));
 
@@ -788,16 +788,61 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 static int tfs_unlink(const char *path) {
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
+	char *dirc, *basec, *bname, *dpath;
+	dirc = strdup(path);
+	basec = strdup(path);
+	dpath = dirname(dirc);
+	bname = basename(basec);
 
 	// Step 2: Call get_node_by_path() to get inode of target file
+	struct inode *temp = malloc(sizeof(struct inode));
+
+
+	//free ater step 6? ^^^^^
+
+
+	int check;
+	check = get_node_by_path(path, 0, temp);
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
+		return -1;
+	}
 
 	// Step 3: Clear data block bitmap of target file
+	int indirect_capacity = BLOCK_SIZE/sizeof(int);
+	unsigned char buf[BLOCK_SIZE];
+	bio_read(sb.d_bitmap_blk, buf);
+	int i,j;
+	for (i=0; i<temp->link && i<16; i++){	//clear direct blocks
+		if(temp->direct_ptr[i] == 0)
+			break;
+		unset_bitmap((bitmap_t)buf, temp->direct_ptr[i]);
+	}
+	int blocks[BLOCK_SIZE/sizeof(int)];
+	for (i=0; i<8 && (i*indirect_capacity)<(temp->link-16); i++){	//clear indirect blocks
+		bio_read(temp->indirect_ptr[i], blocks);
+		for (j=0; j<indirect_capacity && i*indirect_capacity+j<(temp->link-16); j++) {
+			if(blocks[j] == 0)
+				break;
+			unset_bitmap((bitmap_t)buf, blocks[j]);
+		}
+	}
+	bio_write(sb.d_bitmap_blk, buf);
 
 	// Step 4: Clear inode bitmap and its data block
+	bio_read(sb.i_bitmap_blk, buf);
+	unset_bitmap((bitmap_t)buf, temp->ino);
+	bio_write(sb.i_bitmap_blk, buf);
 
 	// Step 5: Call get_node_by_path() to get inode of parent directory
+	check = get_node_by_path(dpath, 0, temp);
+	if (check != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
+		return -1;
+	}
 
 	// Step 6: Call dir_remove() to remove directory entry of target file in its parent directory
+	dir_remove(*temp, bname, strlen(bname));
 
 	return 0;
 }
