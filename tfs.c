@@ -487,6 +487,7 @@ static int tfs_rmdir(const char *path) {
 		return -1;
 	}
 
+
 	unsigned char bitmap_buf[BLOCK_SIZE] = {};
 	char data_buf[BLOCK_SIZE] = {};
 	int curr_direct;
@@ -585,7 +586,7 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
-	size_t size_cp = size;
+	int size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *curr_inode = malloc(sizeof(struct inode));
 
@@ -672,7 +673,7 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 
-	size_t size_cp = size;
+	int size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *curr_inode = malloc(sizeof(struct inode));
 
@@ -785,7 +786,6 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 }
 
 static int tfs_unlink(const char *path) {
-
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 	char *dirc, *basec, *bname, *dpath;
 	dirc = strdup(path);
@@ -821,9 +821,9 @@ static int tfs_unlink(const char *path) {
 		unset_bitmap((bitmap_t)bitmap_buf, curr_inode->direct_ptr[curr_direct]);
 	}
 	bio_write(sb.d_bitmap_blk, bitmap_buf);
-
 	printf("Data block stuff done.\n");
 	// Step 4: Clear inode bitmap and its data block
+
 	curr_inode->valid = 0;
 	curr_inode->type = 0;
 	curr_inode->link = 0;
@@ -833,7 +833,7 @@ static int tfs_unlink(const char *path) {
 	bio_write(sb.i_bitmap_blk, bitmap_buf);
 
 	// Step 5: Call get_node_by_path() to get inode of parent directory
-	if (get_node_by_path(dpath, 0, curr_inode) != 0 || curr_inode->type != 0){
+	if (get_node_by_path(dpath, 0, curr_inode) != 0 || curr_inode->type !
 		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
 		return -1;
 	}
