@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
 	printf("TEST 1: File create Success \n");
 
 
-	/* Perform sequential writes */
-	for (i = 0; i < ITERS; i++) {
+	 /* Perform sequential writes */
+	 for (i = 0; i < ITERS; i++) {
 		//memset with some random data
 		memset(buf, 0x61 + i, BLOCKSIZE);
 
@@ -49,25 +49,25 @@ int main(int argc, char **argv) {
 		printf("TEST 2: File write failure #2\n");
 		exit(1);
 	}
-	printf("TEST 2: File write Success \n");
+	printf("TEST 2: File write Success \n"); 
 
 
 	/*Close operation*/	
-	if (close(fd) < 0) {
+	 if (close(fd) < 0) {
 		printf("TEST 3: File close failure \n");
 	}
-	printf("TEST 3: File close Success \n");
+	printf("TEST 3: File close Success \n"); 
 
 
 	/* Open for reading */
-	if ((fd = open(TESTDIR "/file", FILEPERM)) < 0) {
+	 if ((fd = open(TESTDIR "/file", FILEPERM)) < 0) {
 		perror("open");
 		exit(1);
-	}
+	} 
 
 
 	/* Perform sequential reading */
-	for (i = 0; i < ITERS; i++) {
+	 for (i = 0; i < ITERS; i++) {
 		//clear buffer
 		memset(buf, 0, BLOCKSIZE);
 
@@ -85,8 +85,7 @@ int main(int argc, char **argv) {
 	}
     
 	printf("TEST 4: File read Success \n");
-	close(fd);
-
+	close(fd); 
 
 	/* Unlink the file */
 	if ((ret = unlink(TESTDIR "/file")) < 0) {
@@ -95,7 +94,6 @@ int main(int argc, char **argv) {
 		exit(1);
 	}
 	printf("TEST 5: File unlink success \n");
-
 
 	/* Directory creation test */
 	if ((ret = mkdir(TESTDIR "/files", DIRPERM)) < 0) {
@@ -133,7 +131,7 @@ int main(int argc, char **argv) {
 		}
 	}
 	printf("TEST 7: Sub-directory create success \n");
-
+	
 	printf("Benchmark completed \n");
 	return 0;
 }
