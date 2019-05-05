@@ -26,7 +26,7 @@
 #include "block.h"
 #include "tfs.h"
 
-char diskfile_path[PATH_MAX] = "/tmp/tmc231/mountdir";
+char diskfile_path[PATH_MAX];
 // Declare your in-memory data structures here
 struct superblock sb;
 /*
@@ -83,6 +83,7 @@ int readi(uint16_t ino, struct inode *inode) {
 	struct inode *temp_inode = malloc(sizeof(struct inode));
 	memcpy(temp_inode, buf + inode_offset, sizeof(struct inode));
 	*inode = *temp_inode;
+	printf("Ended up reading inode with number %d.\n", (int)(temp_inode->ino));
 	return 0;
 }
 
@@ -98,6 +99,7 @@ int writei(uint16_t ino, struct inode *inode) {
 	bio_read(inode_blkno, buf);
 	memcpy((buf + inode_offset), inode, sizeof(struct inode));
 	bio_write(inode_blkno, buf);
+	printf("Ended up writing inode with number %d.\n", (int)(((struct inode *)(buf + inode_offset))->ino));
 	return 0;
 }
 
@@ -245,6 +247,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	printf("Token: %s, Rest: %s\n", token, rest);
 	if (token == NULL) {
 		readi(ino, inode);
+		printf("Ended up with inode with number %d.\n", (int)(inode->ino));
 		return 0;
 	}
 	if (dir_find(ino, token, strlen(token), target) == 0) {
@@ -294,7 +297,7 @@ int tfs_mkfs() {
 	root.valid = 1;
 	root.size = 0;
 	root.type = 1;
-	root.link = 0;
+	root.link = 1;
 
 	int i;
 	for(i = 0; i <= 15; i++) {
@@ -349,18 +352,26 @@ static void tfs_destroy(void *userdata) {
 static int tfs_getattr(const char *path, struct stat *stbuf) {
 	// Step 1: call get_node_by_path() to get inode from path
 	struct inode *curr_inode = malloc(sizeof(struct inode));
-	if(get_node_by_path(path, 0, curr_inode) == 0) {
+	int check = get_node_by_path(path, 0, curr_inode);
+	printf("Check: %d\n", check);
+	if(check == 0) {
 		// Step 2: fill attribute of file into stbuf from inode
-		*stbuf = curr_inode->vstat;
-		//stbuf->st_dev = 
+		//*stbuf = curr_inode->vstat;
+		//stbuf->st_dev =
+		stbuf->st_uid = getuid();
+		stbuf->st_gid = getgid(); 
 		stbuf->st_ino = curr_inode->ino;
-		stbuf->st_mode = curr_inode->type;
 		stbuf->st_nlink = curr_inode->link;
 		stbuf->st_size = curr_inode->size;
 		stbuf->st_blksize = BLOCK_SIZE;
-		//stbuf->st_mode   = S_IFDIR | 0755;
-		//stbuf->st_nlink  = 2;
-		time(&stbuf->st_mtime);
+		if(curr_inode->type == 0) {
+			stbuf->st_mode = S_IFREG | 0644;
+		}
+		else {
+			stbuf->st_mode   = S_IFDIR | 0755;
+		}
+		stbuf->st_atime = time(0);
+		stbuf->st_mtime = time(0);
 		return 0;
 	}
 	return -ENOENT;
@@ -448,7 +459,7 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 	curr_inode->valid = 1;
 	curr_inode->size = 0;
 	curr_inode->type = 1;
-	curr_inode->link = 0;
+	curr_inode->link = 1;
 
 	int i;
 	for(i = 0; i <= 15; i++) {
@@ -544,7 +555,9 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	struct inode *parentdir = malloc(sizeof(struct inode));
 	unsigned char buf[BLOCK_SIZE];
 	// Step 2: Call get_node_by_path() to get inode of parent directory
-	if(get_node_by_path(dpath, 0, parentdir) != 0 || parentdir->type != 1)
+	int check = get_node_by_path(dpath, 0, parentdir);
+	printf("Check: %d\n", check);
+	if(check != 0 || parentdir->type != 1)
 		return -1;
 	// Step 3: Call get_avail_ino() to get an available inode number
 	int ino = get_avail_ino();
@@ -558,10 +571,11 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	// Step 5: Update inode for target file
 	struct inode *new = malloc(sizeof(struct inode));
 	readi(ino, new);
+	new->ino = (uint16_t)ino;
 	new->valid = 1;
 	new->size = 0;
 	new->type = 0;
-	new->link = 0;
+	new->link = 1;
 	int i;
 	for(i = 0; i <= 15; i++) {
 		new->direct_ptr[i] = -1;
@@ -571,6 +585,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	//set stat
 	// Step 6: Call writei() to write inode to disk
 	writei(ino, new);
+	printf("Created.\n");
 	return 0;
 }
 
@@ -585,94 +600,7 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 }
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
-
-	int size_cp = size;
-	// Step 1: You could call get_node_by_path() to get inode from path
-	struct inode *curr_inode = malloc(sizeof(struct inode));
-
-
-	//free ater step 3? ^^^^^
-
-	if (get_node_by_path(path, 0, curr_inode) != 0 || curr_inode->type != 0){
-		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
-		return -1;
-	}
-
-	// Step 2: Based on size and offset, read its data blocks from disk
-	int start = offset/BLOCK_SIZE;
-	int buff_offset = 0;
-	int indirect_capacity = BLOCK_SIZE/sizeof(int);
-	char buff[BLOCK_SIZE];
-	int i = start, j = start;
-
-	// Step 2a: Copy direct blocks into buffer
-	for (;i<16 && size > 0; i++){
-		bio_read(curr_inode->direct_ptr[i], buff);
-		if(i==start){
-			if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
-				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), (BLOCK_SIZE-(offset%BLOCK_SIZE)));
-				buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
-				size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
-			}else{
-				memcpy(buffer,(buff+(offset%BLOCK_SIZE)), size);
-			}
-		} else {
-			if(size>BLOCK_SIZE){
-				memcpy((buffer+buff_offset),buff, BLOCK_SIZE);
-				buff_offset += BLOCK_SIZE;
-				size -= BLOCK_SIZE;
-			}else{
-				memcpy((buffer+buff_offset),buff, size);
-			}
-		}
-	}
-
-	//step 2b: Copy indirect blocks into buffer
-	int indir_only = 0;
-	if (i == j){	//direct blocks not used
-		i = (i-16)/indirect_capacity;
-		j = (start-16)%indirect_capacity;
-		indir_only = 1;
-	}
-	else if (j < i && size > 0){	//direct blocks used - still more to read
-		i = 0;
-		j = 0;
-	}
-	int blocks[BLOCK_SIZE/sizeof(int)];
-	for (;i<8 && size > 0; i++){
-		bio_read(curr_inode->indirect_ptr[i], blocks);
-		for (;j<indirect_capacity && size > 0; j++){
-			bio_read(blocks[j],buff);
-			if(indir_only){
-				if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
-					memcpy(buffer,(buff+(offset%BLOCK_SIZE)), (BLOCK_SIZE-(offset%BLOCK_SIZE)));
-					buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
-					size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
-					indir_only = 0;
-				}else{
-					memcpy(buffer,(buff+(offset%BLOCK_SIZE)), size);
-				}
-			} else {
-				if(size>BLOCK_SIZE){
-					memcpy((buffer+buff_offset),buff, BLOCK_SIZE);
-					buff_offset += BLOCK_SIZE;
-					size -= BLOCK_SIZE;
-				}else{
-					memcpy((buffer+buff_offset),buff, size);
-				}
-			}
-		}
-	}
-
-	// Step 3: copy the correct amount of data from offset to buffer
-	//done in above code
-
-	// Note: this function should return the amount of bytes you copied to buffer
-	return size_cp;
-}
-
-static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
-
+	printf("In tfs_read(). Offset here is %d, start here is %d\n", (int) offset, (int)offset / BLOCK_SIZE);
 	int size_cp = size;
 	// Step 1: You could call get_node_by_path() to get inode from path
 	struct inode *curr_inode = malloc(sizeof(struct inode));
@@ -684,94 +612,216 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
 		return -1;
 	}
-
 	// Step 2: Based on size and offset, read its data blocks from disk
-	int start = offset/BLOCK_SIZE;
-	int buff_offset = 0;
+	int start = offset / BLOCK_SIZE;
+	int write_offset = 0;
 	int indirect_capacity = BLOCK_SIZE/sizeof(int);
-	char buff[BLOCK_SIZE];
-	int i = start, j = start;
-	int altered = 0;
-	int altered_o = 0;
+	char buf[BLOCK_SIZE] = {};
+	int curr_direct = start, curr_indirect = start;
 
 	// Step 2a: Write direct blocks from buffer
-	for (;i<16 && size > 0; i++){
-		if (curr_inode->direct_ptr[i] == 0){
-			curr_inode->direct_ptr[i] = get_avail_blkno();
-			altered = 1;
+	for (; (curr_direct <= 15 && size_cp > 0); curr_direct++){
+		printf("Curr Direct: %d. Size: %d\n", curr_direct, size_cp); 
+		if (curr_inode->direct_ptr[curr_direct] == -1) {
+			printf("Trying to read more than is allocated!\n");
 		}
-		if(i==start){
-			if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
-				bio_read(curr_inode->direct_ptr[i], buff);	//read block so data is not overwritten as null
-				memcpy((buff+(offset%BLOCK_SIZE)), buffer, (BLOCK_SIZE-(offset%BLOCK_SIZE)));
-				buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
-				size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
-			}else{
-				bio_read(curr_inode->direct_ptr[i], buff);	//read block so data is not overwritten as null
-				memcpy((buff+(offset%BLOCK_SIZE)), buffer, size);
+		bio_read(curr_inode->direct_ptr[curr_direct], buf); //read block so data is not overwritten as null
+		if(curr_direct == start){
+			if(offset % BLOCK_SIZE + size_cp < BLOCK_SIZE) {
+				memcpy(buffer, (buf + (offset % BLOCK_SIZE)), size_cp);
+				write_offset += size_cp;
+				size_cp = 0;
 			}
-		} else {
-			if(size>BLOCK_SIZE){
-				memcpy(buff, (buffer+buff_offset), BLOCK_SIZE);
-				buff_offset += BLOCK_SIZE;
-				size -= BLOCK_SIZE;
-			}else{
-				memcpy(buff, (buffer+buff_offset), size);
+			else {
+				memcpy(buffer, (buf + (offset % BLOCK_SIZE)), (BLOCK_SIZE - (offset % BLOCK_SIZE)));
+				write_offset += (BLOCK_SIZE - (offset % BLOCK_SIZE));
+				size_cp -= (BLOCK_SIZE - (offset % BLOCK_SIZE));
+			}
+		} 
+		else {
+			if(size_cp > BLOCK_SIZE){
+				memcpy((buffer + write_offset), buf, BLOCK_SIZE);
+				write_offset += BLOCK_SIZE;
+				size_cp -= BLOCK_SIZE;
+			}
+			else {
+				memcpy((buffer + write_offset), buf, size_cp);
+				size_cp -= size_cp;
 			}
 		}
-		bio_write(curr_inode->direct_ptr[i], buff);
 	}
 
-	//step 2b: Write indirect blocks from buffer
+	//step 2b: Copy indirect blocks into buffer
 	int indir_only = 0;
-	if (i == j){	//direct blocks not used
-		i = (i-16)/indirect_capacity;
-		j = (start-16)%indirect_capacity;
+	if (curr_direct == curr_indirect) {	//direct blocks not used - offset too large
+		curr_direct = (curr_direct - 16) / indirect_capacity;
+		curr_indirect = (start - 16) % indirect_capacity;
 		indir_only = 1;
 	}
-	else if (j < i && size > 0){	//direct blocks used - still more to read
-		i = 0;
-		j = 0;
+	else if (curr_indirect < curr_direct && size > 0) {	//direct blocks used - still more to read
+		curr_direct = 0;
+		curr_indirect = 0;
 	}
 	int blocks[BLOCK_SIZE/sizeof(int)];
-	for (;i<8 && size > 0; i++){
-		if (curr_inode->direct_ptr[i] == 0){
-			curr_inode->direct_ptr[i] = get_avail_blkno();
-			altered = 1;
+	for (; curr_direct <= 7 && size_cp > 0; curr_direct++) {
+		printf("Curr (in)Direct: %d. Size: %d\n", curr_direct, size_cp); 
+		if (curr_inode->indirect_ptr[curr_direct] == -1) {
+			printf("Trying to read more than is allocated!\n");
 		}
-		bio_read(curr_inode->indirect_ptr[i], blocks);
-		for (;j<indirect_capacity && size > 0; j++){
-			if(blocks[j] == 0){
-				blocks[j] = get_avail_blkno();
-				altered_o = 1;
+		bio_read(curr_inode->indirect_ptr[curr_direct], blocks);
+		for (; curr_indirect < indirect_capacity && size_cp > 0; curr_indirect++){
+			printf("\tCurr Indirect: %d. Size: %d\n", curr_indirect, size_cp); 
+			if(blocks[curr_indirect] == 0){ 
+				printf("Trying to read more than is allocated!\n");
 			}
-			if(indir_only){
-				if((offset%BLOCK_SIZE)+size>BLOCK_SIZE){
-					bio_read(blocks[j], buff);	//read block so data is not overwritten as null
-					memcpy((buff+(offset%BLOCK_SIZE)), buffer, (BLOCK_SIZE-(offset%BLOCK_SIZE)));
-					buff_offset += (BLOCK_SIZE-(offset%BLOCK_SIZE));
-					size -= (BLOCK_SIZE-(offset%BLOCK_SIZE));
-					indir_only = 0;
-				}else{
-					bio_read(blocks[j], buff);	//read block so data is not overwritten as null
-					memcpy((buff+(offset%BLOCK_SIZE)), buffer, size);
+			bio_read(blocks[curr_indirect], buf);	//read block so data is not overwritten as null
+			if(indir_only) {
+				if((offset % BLOCK_SIZE) + size_cp < BLOCK_SIZE) {
+					memcpy(buffer, (buf + (offset % BLOCK_SIZE)), size_cp);
+					write_offset += size_cp;
+					size_cp = 0;
 				}
-			} else {
-				if(size>BLOCK_SIZE){
-					memcpy(buff, (buffer+buff_offset), BLOCK_SIZE);
-					buff_offset += BLOCK_SIZE;
-					size -= BLOCK_SIZE;
-				}else{
-					memcpy(buff, (buffer+buff_offset), size);
+				else {
+					memcpy(buffer, (buf + (offset % BLOCK_SIZE)), (BLOCK_SIZE - (offset % BLOCK_SIZE)));
+					write_offset += (BLOCK_SIZE - (offset % BLOCK_SIZE));
+					size_cp -= (BLOCK_SIZE - (offset % BLOCK_SIZE));
+
+				}
+				indir_only = 0;
+			} 
+			else {
+				if(size_cp > BLOCK_SIZE) {
+					memcpy((buffer + write_offset), buf, BLOCK_SIZE);
+					write_offset += BLOCK_SIZE;
+					size_cp -= BLOCK_SIZE;
+				}
+				else {
+					memcpy((buffer + write_offset), buf, size_cp);
+					size_cp = 0;
 				}
 			}
-			bio_write(blocks[j],buff);
+			bio_write(blocks[curr_indirect], buf);
 		}
-		if (altered_o) {
-			bio_write(curr_inode->indirect_ptr[i], blocks); //update indirect block
-		}
+		bio_write(curr_inode->indirect_ptr[curr_direct], blocks); //update indirect block
 	}
-	if(altered){
+	printf("Remaining: %d\n", (int)(size - size_cp));
+	return (size - size_cp);
+}
+
+static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+	printf("In tfs_write(). Offset here is %d, start here is %d\n", (int) offset, (int)offset / BLOCK_SIZE);
+	int size_cp = size;
+	// Step 1: You could call get_node_by_path() to get inode from path
+	struct inode *curr_inode = malloc(sizeof(struct inode));
+
+
+	//free ater step 4? ^^^^^
+
+	if (get_node_by_path(path, 0, curr_inode) != 0 || curr_inode->type != 0){
+		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", path);
+		return -1;
+	}
+	// Step 2: Based on size and offset, read its data blocks from disk
+	int start = offset / BLOCK_SIZE;
+	int write_offset = 0;
+	int indirect_capacity = BLOCK_SIZE/sizeof(int);
+	char buf[BLOCK_SIZE] = {};
+	int curr_direct = start, curr_indirect = start;
+
+	// Step 2a: Write direct blocks from buffer
+	for (; (curr_direct <= 15 && size_cp > 0); curr_direct++){
+		printf("Curr Direct: %d. Size: %d\n", curr_direct, size_cp); 
+		if (curr_inode->direct_ptr[curr_direct] == -1){
+			curr_inode->direct_ptr[curr_direct] = get_avail_blkno();
+			curr_inode->link++;
+		}
+		bio_read(curr_inode->direct_ptr[curr_direct], buf); //read block so data is not overwritten as null
+		if(curr_direct == start){
+			if((offset % BLOCK_SIZE + size_cp) < BLOCK_SIZE) {
+				memcpy((buf + (offset % BLOCK_SIZE)), buffer, size_cp);
+				curr_inode->size += size_cp;
+				write_offset += size_cp;
+				size_cp = 0;
+			}
+			else {
+				memcpy((buf + (offset % BLOCK_SIZE)), buffer, (BLOCK_SIZE - (offset % BLOCK_SIZE)));
+				write_offset += (BLOCK_SIZE - (offset % BLOCK_SIZE));
+				curr_inode->size += (BLOCK_SIZE - (offset % BLOCK_SIZE));
+				size_cp -= (BLOCK_SIZE - (offset % BLOCK_SIZE));
+			}
+		} 
+		else {
+			if(size_cp > BLOCK_SIZE){
+				memcpy(buf, (buffer + write_offset), BLOCK_SIZE);
+				write_offset += BLOCK_SIZE;
+				size_cp -= BLOCK_SIZE;
+				curr_inode->size += BLOCK_SIZE;
+			}
+			else {
+				memcpy(buf, (buffer + write_offset), size_cp);
+				curr_inode->size += size_cp;
+				size_cp = 0;
+			}
+		}
+		bio_write(curr_inode->direct_ptr[curr_direct], buf);
+	}
+	//step 2b: Write indirect blocks from buffer
+	int indir_only = 0;
+	if (curr_direct == curr_indirect) {	//direct blocks not used - offset too large
+		curr_direct = (start - 16) / indirect_capacity;
+		curr_indirect = (start - 16) % indirect_capacity;
+		indir_only = 1;
+	}
+	else if (curr_indirect < curr_direct && size > 0) {	//direct blocks used - still more to read
+		curr_direct = 0;
+		curr_indirect = 0;
+	}
+	int blocks[BLOCK_SIZE/sizeof(int)];
+	for (; curr_direct <= 7 && size_cp > 0; curr_direct++) {
+		printf("Curr (in)Direct: %d. Size: %d\n", curr_direct, size_cp); 
+		if (curr_inode->indirect_ptr[curr_direct] == -1) {
+			curr_inode->indirect_ptr[curr_direct] = get_avail_blkno();
+		}
+		bio_read(curr_inode->indirect_ptr[curr_direct], blocks);
+		for (; curr_indirect < indirect_capacity && size_cp > 0; curr_indirect++){
+			printf("\tCurr Indirect: %d. Size: %d\n", curr_indirect, size_cp); 
+			if(blocks[curr_indirect] == 0){ 
+				blocks[curr_indirect] = get_avail_blkno();
+			}
+			bio_read(blocks[curr_indirect], buf);	//read block so data is not overwritten as null
+			if(indir_only) {
+				if((offset % BLOCK_SIZE) + size_cp < BLOCK_SIZE) {
+					memcpy((buf + (offset % BLOCK_SIZE)), buffer, size_cp);
+					write_offset += size_cp;
+					curr_inode->size += size_cp;
+					size_cp = 0;
+					indir_only = 0;
+				}
+				else {
+					memcpy((buf + (offset % BLOCK_SIZE)), buffer, (BLOCK_SIZE - (offset % BLOCK_SIZE)));
+					write_offset += (BLOCK_SIZE - (offset % BLOCK_SIZE));
+					curr_inode->size += (BLOCK_SIZE - (offset % BLOCK_SIZE));
+					size_cp -= (BLOCK_SIZE - (offset % BLOCK_SIZE));
+				}
+			} 
+			else {
+				if(size_cp > BLOCK_SIZE) {
+					memcpy(buf, (buffer + write_offset), BLOCK_SIZE);
+					write_offset += BLOCK_SIZE;
+					size_cp -= BLOCK_SIZE;
+					curr_inode->size += BLOCK_SIZE;
+				}
+				else {
+					memcpy(buf, (buffer + write_offset), size_cp);
+					curr_inode->size += size_cp;
+					size_cp = 0;
+				}
+			}
+			bio_write(blocks[curr_indirect], buf);
+		}
+		bio_write(curr_inode->indirect_ptr[curr_direct], blocks); //update indirect block
+	}
+	if(size != 0) {
 		writei(curr_inode->ino, curr_inode);
 	}
 
@@ -781,8 +831,8 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 	// Step 4: Update the inode info and write it to disk
 	//done in above code
 
-	// Note: this function should return the amount of bytes you write to disk
-	return size_cp;
+	// Note: this function should return the amount of bytes you write to disk*/
+	return (size - size_cp);
 }
 
 static int tfs_unlink(const char *path) {
@@ -800,7 +850,7 @@ static int tfs_unlink(const char *path) {
 
 	//free ater step 6? ^^^^^
 
-	if (get_node_by_path(path, 0, curr_inode) != 0 || curr_inode->type != 1){
+	if (get_node_by_path(path, 0, curr_inode) != 0 || curr_inode->type != 0){
 		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
 		return -1;
 	}
@@ -833,7 +883,7 @@ static int tfs_unlink(const char *path) {
 	bio_write(sb.i_bitmap_blk, bitmap_buf);
 
 	// Step 5: Call get_node_by_path() to get inode of parent directory
-	if (get_node_by_path(dpath, 0, curr_inode) != 0 || curr_inode->type !
+	if (get_node_by_path(dpath, 0, curr_inode) != 0 || curr_inode->type != 1) {
 		fprintf(stderr, "ERROR:NO NODE FOUND AT PATH \"%s\"\n", dpath);
 		return -1;
 	}
