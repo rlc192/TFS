@@ -9,8 +9,12 @@ OBJ=tfs.o block.o
 
 tfs: $(OBJ)
 	$(CC) $(OBJ) $(LDFLAGS) -o tfs
+	mkdir -p /tmp/tmc231_rlc192
+	mkdir -p /tmp/tmc231_rlc192/mountdir
 
 .PHONY: clean
 clean:
-	rm -f *.o tfs DISKFILE
-
+	rm -f *.o tfs 
+	rm -rf /tmp/tmc231_rlc192/mountdir 
+	rm -rf /tmp/tmc231_rlc192
+	

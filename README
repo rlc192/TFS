@@ -1,0 +1,19 @@
+Rutgers Operating Systems CS416 
+P4: Tiny File System with FUSE Library
+By Thomas Milan Cuba (tmc231), Ryan Lee Callahan (rlc192)
+May 6, 2019
+
+Usage
+
+To start, set the macro “BLOCK_SIZE” in “block.h” to whatever you wish. Make sure that “MAX_DNUM” and “MAX_INUM”  in “tfs.h” are each no more than 8 times “BLOCK_SIZE”, as our file system’s maximum bitmap size is one block. We unfortunately did not have the time (or willpower) to implement bitmaps that span multiple blocks.
+
+Open a command line and type “make” to compile the code. We have edited the makefile to also create directories “/tmp/tmc231_rlc192” and “/tmp/tmc231_rlc192/mountdir”. Please make sure to use the latter name for any test case files.
+
+Mount the filesystem with the command “./tfs -s /tmp/tmc231_rlc192/mountdir”.
+
+Run any tests you like. Note that our “benchmark” directory contains both “simple_test.c” and “test_case.c”, unmodified (we think), and the makefile in “benchmark” has been updated to compile and clean up both.
+
+When finished, unmount the filesystem with the command “fusermount -u /tmp/tmc231_rlc192/mountdir”. Do this before typing “make clean” into the command line so any files do not get deleted! (We don’t think Linux would let you, anyways; when we tried, we got something along the lines of “Device or resource busy”).
+
+Finally, type “make clean”.  This will remove the directories “make” created along with their contents, in addition to the default settings.
+
